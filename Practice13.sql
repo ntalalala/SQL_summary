@@ -78,5 +78,41 @@ SELECT COUNT(*) AS duplicate_companies FROM
   HAVING COUNT(*) > 1) AS new_table;
 
 --ex11
+(SELECT name AS results FROM Users AS a
+JOIN MovieRating AS b
+ON a.user_id = b.user_id
+GROUP BY a.user_id
+ORDER BY COUNT(*) DESC, name
+LIMIT 1)
+
+UNION ALL
+
+(SELECT title FROM Movies AS a1
+JOIN MovieRating AS b1
+ON a1.movie_id = b1.movie_id
+WHERE EXTRACT(month FROM created_at) = 2 AND EXTRACT(year FROM created_at) = 2020
+GROUP BY a1.movie_id, title
+ORDER BY AVG(rating) DESC, title
+LIMIT 1)
+
+--ex12
+SELECT id, 
+(SELECT SUM(
+    CASE
+        WHEN requester_id = id OR accepter_id = id THEN 1
+        ELSE 0
+    END
+)
+FROM RequestAccepted
+) AS num
+FROM(
+    (SELECT requester_id AS id FROM RequestAccepted)
+    UNION (SELECT accepter_id FROM RequestAccepted)
+    ) AS new_table
+ORDER BY num DESC
+LIMIT 1
+
+
+
 
 
