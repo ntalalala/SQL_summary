@@ -92,9 +92,38 @@ Top5_highest_profit_products AS (
   ORDER BY month_year, rank_per_month
 )
 
-SELECT * FROM Top5_highest_profit_products
+SELECT * FROM Top5_highest_profit_products;
 
 -- 5.Doanh thu tính đến thời điểm hiện tại trên mỗi danh mục
--- Thống kê tổng doanh thu theo ngày của từng danh mục sản phẩm (category) trong 3 tháng qua ( giả sử ngày hiện tại là 15/4/2022)
+-- Thống kê tổng doanh thu theo ngày của từng danh mục sản phẩm (category) trong 3 tháng qua (giả sử ngày hiện tại là 15/4/2022)
 -- Output: dates (yyyy-mm-dd), product_categories, revenue
+
+SELECT 
+  FORMAT_DATETIME('%Y-%m-%d', a.created_at) AS dates,
+  b.category AS product_categories,
+  SUM(a.sale_price) AS revenue
+FROM bigquery-public-data.thelook_ecommerce.order_items AS a
+JOIN bigquery-public-data.thelook_ecommerce.products AS b ON a.product_id = b.id
+WHERE a.status = 'Complete' AND FORMAT_DATETIME('%Y-%m-%d', a.created_at) BETWEEN '2022-01-15' AND '2022-04-15'
+GROUP BY FORMAT_DATETIME('%Y-%m-%d', a.created_at), b.category
+ORDER BY dates, product_categories;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
