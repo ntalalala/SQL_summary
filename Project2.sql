@@ -108,6 +108,96 @@ WHERE a.status = 'Complete' AND FORMAT_DATETIME('%Y-%m-%d', a.created_at) BETWEE
 GROUP BY FORMAT_DATETIME('%Y-%m-%d', a.created_at), b.category
 ORDER BY dates, product_categories;
 
+-- Part2: Tạo bảng + cohort analysis
+-- 1  Month:  bảng orders (Tháng của năm dữ liệu) Định dạng yyyy-mm
+-- 2  Year: bảng orders Năm
+-- 3  Product_category: bảng product  
+-- 4  TPV:  bảng orders_items tổng doanh thu mỗi tháng
+-- 5  TPO:  bảng orders_items tổng số đơn hàng mỗi tháng
+-- 6  Revenue_growth: "Trường phái sinh : (doanh thu tháng sau-doanh thu tháng trước)/doanh thu tháng trước"  hiển thị dạng %
+-- 7  Order_growth: "Trường phái sinh : (số đơn hàng tháng sau - số đơn hàng tháng trước)/số đơn tháng trước" hiển thị dạng %
+-- 8  Total_cost: bảng products tổng chi phí mỗi tháng
+-- 9  Total_profit: "Trường phái sinh: Tổng doanh thu - tổng chi phí" tổng lợi nhuận mỗi tháng
+-- 10 Profit_to_cost_ratio: "Trường phái sinh : Tổng lợi nhuận/ tổng chi phí" tỉ lệ lợi nhuân/chi phí mỗi tháng
+
+
+CREATE VIEW bigquery-public-data.thelook_ecommerce.vw_ecommerce_analyst AS (
+  SELECT Month_year, Year, Product_category, TPV, TPO,
+  100.0*(LEAD(TPV) OVER(PARTITION BY product_category ORDER BY Month_year) - TPV)/TPV || '%' AS Revenue_growth,
+  100.0*(LEAD(TPO) OVER(PARTITION BY product_category ORDER BY Month_year) - TPO)/TPO || '%' AS Order_growth,
+  Total_cost, Total_profit, Total_profit/Total_cost AS Profit_to_cost_ratio
+  FROM(
+    SELECT FORMAT_DATETIME('%Y-%m', a.created_at) AS Month_year,
+    EXTRACT(year FROM a.created_at) AS Year,
+    c.category AS Product_category,
+    SUM(b.sale_price) AS TPV,
+    COUNT(a.order_id) AS TPO,
+    SUM(c.cost) AS Total_cost,
+    SUM(b.sale_price) - SUM(c.cost) AS Total_profit
+    FROM bigquery-public-data.thelook_ecommerce.orders AS a  
+    JOIN bigquery-public-data.thelook_ecommerce.order_items AS b ON a.order_id = b.order_id
+    JOIN bigquery-public-data.thelook_ecommerce.products AS c ON b.product_id = c.id
+    WHERE a.status = 'Complete'
+    GROUP BY 1, 2, 3
+  ) AS new1
+)
+
+  
+-- cohort_analysis
+  
+WITH cte AS (
+  SELECT user_id, sale_price,
+  FORMAT_DATETIME('%Y-%m', first_date) AS cohort_date,
+  date,
+  (EXTRACT(YEAR FROM date) - EXTRACT(YEAR FROM first_date))*12 + (EXTRACT(MONTH FROM date) - EXTRACT(MONTH FROM first_date)) AS index
+  FROM(
+    SELECT user_id, sale_price, created_at AS date,
+    MIN(created_at) OVER(PARTITION BY user_id) AS first_date
+    FROM bigquery-public-data.thelook_ecommerce.order_items
+    WHERE status = 'Complete'
+  ) AS new2
+),
+cte2 AS (
+  SELECT cohort_date, index, COUNT(DISTINCT user_id) AS cnt,
+  SUM(sale_price) AS revenue
+  FROM cte
+  WHERE index <= 3
+  GROUP BY 1, 2
+  ORDER BY cohort_date
+),
+--customer_cohort
+customer_cohort AS (
+  SELECT cohort_date,
+  SUM(CASE WHEN index = 0 THEN cnt ELSE 0 END) AS m1,
+  SUM(CASE WHEN index = 1 THEN cnt ELSE 0 END) AS m2,
+  SUM(CASE WHEN index = 2 THEN cnt ELSE 0 END) AS m3,
+  SUM(CASE WHEN index = 3 THEN cnt ELSE 0 END) AS m4,
+  FROM cte2
+  GROUP BY cohort_date
+),
+-- retention cohort
+retention_cohort AS(
+  SELECT ROUND(m1*100.0/m1, 2) || '%' AS m1,
+  ROUND(m2*100.0/m1, 2) || '%' AS m2,
+  ROUND(m3*100.0/m1, 2) || '%' AS m3,
+  ROUND(m4*100.0/m1, 2) || '%' AS m4
+  FROM customer_cohort
+),
+-- churn_cohort
+churn_cohort AS(
+  SELECT (100 - ROUND(m1*100.0/m1, 2)) || '%' AS m1,
+  (100 - ROUND(m2*100.0/m1, 2)) || '%' AS m2,
+  (100 - ROUND(m3*100.0/m1, 2)) || '%' AS m3,
+  (100 - ROUND(m4*100.0/m1, 2)) || '%' AS m4
+  FROM customer_cohort
+)
+
+SELECT * FROM customer_cohort
+ORDER BY cohort_date
+
+  
+-- Visualize cohort analysis
+https://docs.google.com/spreadsheets/d/1P_Eb_Jf8tFh8bfdfNaab_mUglrdZgkxqX6KApDsEskU/edit?usp=sharing
 
 
 
